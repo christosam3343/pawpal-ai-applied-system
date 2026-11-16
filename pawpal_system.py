@@ -5,12 +5,26 @@ Task priority levels are high, medium, and low.
 Optional task times use zero-padded, 24-hour HH:MM format.
 For task updates, None means to leave that field unchanged.
 Pet.complete_task() creates daily or weekly successors; Task completion is status-only.
-Sorting, filtering, recurrence, and overlap warnings are available; tasks are not automatically moved.
+Sorting, filtering, recurrence, and overview warnings are available.
 """
 
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import Dict, List, Optional
+from uuid import uuid4
+
+
+@dataclass(frozen=True)
+class CareRules:
+    """Owner-entered scheduling constraints for a care task."""
+
+    kind: str = "Other"
+    fixed: bool = False
+    earliest: Optional[str] = None
+    latest: Optional[str] = None
+    travel_before: int = 0
+    travel_after: int = 0
+    timing_confirmed: bool = False
 
 
 class Owner:
@@ -99,6 +113,7 @@ class Pet:
                 completed=False,
                 time=task.time,
                 due_date=completion_date + timedelta(days=days),
+                rules=task.rules,
             )
 
         task.mark_complete()
@@ -118,6 +133,8 @@ class Task:
     completed: bool = False
     time: Optional[str] = None
     due_date: Optional[date] = None
+    rules: CareRules = field(default_factory=CareRules)
+    task_id: str = field(default_factory=lambda: uuid4().hex, init=False, repr=False, compare=False)
     _next_occurrence_created: bool = field(default=False, init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
@@ -152,6 +169,10 @@ class Task:
         completed: Optional[bool] = None,
         time: Optional[str] = None,
         due_date: Optional[date] = None,
+        *,
+        rules: Optional[CareRules] = None,
+        clear_time: bool = False,
+        clear_due_date: bool = False,
     ) -> None:
         """Update supplied fields; None leaves a field unchanged."""
         # Validate first so an invalid update does not partially change the task.
@@ -173,10 +194,12 @@ class Task:
             self.description = description
         if completed is not None:
             self.completed = completed
-        if time is not None:
+        if time is not None or clear_time:
             self.time = time
-        if due_date is not None:
+        if due_date is not None or clear_due_date:
             self.due_date = due_date
+        if rules is not None:
+            self.rules = rules
 
     def get_details(self) -> str:
         """Describe all task fields in a readable format."""
@@ -300,7 +323,3 @@ class Scheduler:
                         f"({second_task.time}, {second_task.duration:g} minutes)."
                     )
         return warnings
-
-    def generate_schedule(self) -> List[Task]:
-        """Raise NotImplementedError because automatic plan generation is not implemented."""
-        raise NotImplementedError("Schedule generation is reserved for Phase 4.")

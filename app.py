@@ -1,252 +1,314 @@
+"""Streamlit entry point for PawPal+ AI."""
+
+from dataclasses import replace
+from datetime import date, time
+import logging
+
 import streamlit as st
 
-from pawpal_system import Owner, Pet, Task, Scheduler
+from examples import demo
+from local_model import interpret_preference
+from pawpal_system import CareRules, Owner, Pet, Scheduler, Task
+from planning import KINDS, Proposal, clock, decide, looks_like_medication, minute, propose, snapshot
 
-st.set_page_config(page_title="PawPal+", page_icon="🐾", layout="centered")
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
 
-# Keep the owner and its pets and tasks available across Streamlit reruns.
-if "owner" not in st.session_state:
-    st.session_state["owner"] = Owner(name="Pet Owner", available_time=120)
+st.set_page_config(page_title="PawPal+ AI", page_icon="🐾", layout="wide")
+state = st.session_state
+if "owner" not in state:
+    state.owner = Owner(name="Pet Owner", available_time=240)
+    state.audit = []
+    state.applied = {}
 
-owner = st.session_state["owner"]
-scheduler = Scheduler(owner)
-
-
-def task_rows(owner: Owner, tasks: list[Task]) -> list[dict]:
-    """Build display rows from the owner's current pets and task objects."""
-    rows = []
-    for task in tasks:
-        for pet_index, pet in enumerate(owner.pets):
-            if any(task is pet_task for pet_task in pet.tasks):
-                rows.append(
-                    {
-                        "Pet": f"{pet_index + 1}. {pet.name} ({pet.breed})",
-                        "Task": task.name,
-                        "Description": task.description,
-                        "Due date": task.due_date.isoformat() if task.due_date else "Unscheduled",
-                        "Time": task.time if task.time is not None else "Unscheduled",
-                        "Duration (minutes)": task.duration,
-                        "Priority": task.priority,
-                        "Frequency": task.frequency,
-                        "Status": "completed" if task.completed else "incomplete",
-                    }
-                )
-    return rows
+owner = state.owner
 
 
-def completion_label(option: tuple[int, int]) -> str:
-    """Identify the exact pet and task, including same-name pets or tasks."""
-    pet_index, task_index = option
-    pet = owner.pets[pet_index]
-    task = pet.tasks[task_index]
-    due = task.due_date.isoformat() if task.due_date else "No date"
-    return (
-        f"{pet_index + 1}. {pet.name} ({pet.breed}) / "
-        f"{task_index + 1}. {task.name} / {due} {task.time or 'No time'}"
-    )
+def as_time(value: str | None) -> time | None:
+    return time.fromisoformat(value) if value else None
 
-st.title("🐾 PawPal+")
 
-st.markdown(
-    """
-Welcome to PawPal+. Add pets and care tasks, review them by time, and check for overlaps.
-Completing a daily or weekly task creates its next occurrence.
-"""
-)
+def as_text(value: time | None) -> str | None:
+    return value.strftime("%H:%M") if value is not None else None
 
-with st.expander("Scenario", expanded=True):
-    st.markdown(
-        """
-**PawPal+** is a pet care planning assistant. It helps a pet owner plan care tasks
-for their pet(s) based on constraints like time, priority, and preferences.
 
-You can manage pets, review tasks, and complete recurring care here.
-Automatic plan generation is not implemented.
-"""
-    )
+def pet_label(index: int) -> str:
+    pet = owner.pets[index]
+    return f"{index + 1}. {pet.name} ({pet.breed})"
 
-with st.expander("What you need to build", expanded=True):
-    st.markdown(
-        """
-At minimum, your system should:
-- Represent pet care tasks (what needs to happen, how long it takes, priority)
-- Represent the pet and the owner (basic info and preferences)
-- Build a plan/schedule for a day that chooses and orders tasks based on constraints
-- Explain the plan (why each task was chosen and when it happens)
-"""
-    )
 
-st.divider()
+def task_label(option: tuple[int, int]) -> str:
+    pet, index = option
+    task = owner.pets[pet].tasks[index]
+    return f"{pet_label(pet)} / {index + 1}. {task.name}"
 
-st.subheader("Owner and pets")
-owner_name = st.text_input("Owner name", value=owner.name, key="owner_name")
-if owner_name.strip():
-    owner.name = owner_name.strip()
-else:
-    st.warning("Enter an owner name. Your saved owner name has not changed.")
 
-with st.form("add_pet_form"):
-    st.markdown("### Add a pet")
-    pet_name = st.text_input("Pet name", key="pet_name")
-    pet_breed = st.text_input("Breed", key="pet_breed")
-    pet_age = st.number_input("Age (years)", min_value=0, value=0, step=1, key="pet_age")
-    add_pet = st.form_submit_button("Add pet", key="add_pet")
+def pending_tasks() -> list[tuple[int, int]]:
+    return [(p, t) for p, pet in enumerate(owner.pets) for t, task in enumerate(pet.tasks)
+            if not task.completed]
 
-if add_pet:
-    if not pet_name.strip() or not pet_breed.strip():
-        st.error("Enter a pet name and breed.")
-    elif pet_age < 0:
-        st.error("Pet age cannot be negative.")
+
+def render_task_form(pet: Pet, task: Task | None = None) -> None:
+    saved = task or Task("", 20, "medium", "once")
+    key = saved.task_id if task else "new"
+    rules = saved.rules
+    kind = st.selectbox("Care type", KINDS, index=KINDS.index(rules.kind), key=f"kind_{key}")
+    with st.form(f"task_{key}"):
+        fields = st.columns(3)
+        name = fields[0].text_input("Task title", value=saved.name, max_chars=90, key=f"name_{key}")
+        duration = fields[1].number_input("Duration (minutes)", min_value=1, max_value=1440,
+                                          value=min(1440, max(1, int(saved.duration))), key=f"duration_{key}")
+        priority = fields[2].selectbox("Priority", ("low", "medium", "high"),
+                                       index=("low", "medium", "high").index(saved.priority), key=f"priority_{key}")
+        description = st.text_input("Care notes (optional)", value=saved.description, max_chars=250)
+        when = st.columns(3)
+        day = when[0].date_input("Due date (optional)", value=saved.due_date)
+        start = when[1].time_input("Start time (optional)", value=as_time(saved.time), step=60,
+                                   key=f"start_{key}")
+        frequencies = ("once", "daily", "weekly")
+        frequency = when[2].selectbox("Frequency", frequencies,
+                                      index=frequencies.index(saved.frequency) if saved.frequency in frequencies else 0)
+        if kind in ("Medication", "Appointment"):
+            fixed = True
+        else:
+            fixed = st.checkbox("Keep the start time fixed", value=rules.fixed)
+        before = after = 0
+        confirmed = False
+        if kind == "Medication":
+            confirmed = st.checkbox("I checked this fixed time against existing veterinary instructions",
+                                    key=f"confirm_med_{key}_{saved.time}")
+            if rules.kind == kind and rules.timing_confirmed:
+                st.caption(f"The recorded time {saved.time} was previously confirmed. Confirm again for a new time.")
+            st.caption("Use the prescribed timing for this reminder. Verify uncertain instructions with your veterinarian.")
+        if kind == "Appointment":
+            travel = st.columns(2)
+            before = travel[0].number_input("Travel to appointment (minutes)", 0, 1440, rules.travel_before)
+            after = travel[1].number_input("Return travel (minutes)", 0, 1440, rules.travel_after)
+        with st.expander("Allowed start window"):
+            window = st.columns(2)
+            earliest = window[0].time_input("Earliest start (optional)", value=as_time(rules.earliest), step=60)
+            latest = window[1].time_input("Latest start (optional)", value=as_time(rules.latest), step=60)
+        clicked = st.form_submit_button("Save changes" if task else "Add task", type="primary",
+                                        key="save_task" if task else "add_task")
+
+    if not clicked:
+        return
+    if not name.strip():
+        st.error("Enter a task title.")
+        return
+    if kind != "Medication" and looks_like_medication(name):
+        st.error("Use the Medication care type for a medication reminder.")
+        return
+    if kind in ("Appointment", "Medication") and start is None:
+        st.error("Enter a fixed start time.")
+        return
+    if fixed and start is None:
+        st.error("Enter the start time to keep it fixed.")
+        return
+    if earliest is not None and latest is not None and earliest > latest:
+        st.error("The latest start must be at or after the earliest start.")
+        return
+
+    if kind == "Medication" and rules.kind == kind and rules.timing_confirmed:
+        confirmed = confirmed or as_text(start) == saved.time
+    new_rules = CareRules(kind, fixed, as_text(earliest), as_text(latest), before, after, confirmed)
+    values = dict(name=name.strip(), duration=duration, priority=priority,
+                  frequency=frequency, description=description.strip(), time=as_text(start),
+                  due_date=day, rules=new_rules)
+    if task:
+        task.update_task(**values, clear_time=start is None, clear_due_date=day is None)
     else:
-        pet = Pet(name=pet_name.strip(), breed=pet_breed.strip(), age=int(pet_age))
-        owner.add_pet(pet)
-        st.success(f"Added {pet.name}.")
+        pet.add_task(Task(**values))
+    st.success(f"Saved {name.strip()} for {pet.name}.")
 
-st.markdown("### Tasks")
-st.caption("Record a task for a pet. Dates and times are optional, but both are needed for conflict checks.")
 
-if not owner.pets:
-    st.info("Add a pet before adding a task.")
-else:
-    with st.form("add_task_form"):
-        # Use positions so pets with the same name can be selected separately.
-        pet_index = st.selectbox(
-            "Pet",
-            options=list(range(len(owner.pets))),
-            format_func=lambda index: f"{index + 1}. {owner.pets[index].name} ({owner.pets[index].breed})",
-            key="task_pet_index",
-        )
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            task_title = st.text_input("Task title", key="task_title")
-        with col2:
-            duration = st.number_input(
-                "Duration (minutes)", min_value=1, max_value=240, value=20, key="task_duration"
-            )
-        with col3:
-            priority = st.selectbox("Priority", ["low", "medium", "high"], index=2, key="task_priority")
-        description = st.text_input("Description (optional)", key="task_description")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            due_date = st.date_input("Due date (optional)", value=None, key="task_due_date")
-        with col2:
-            clock_time = st.time_input("Start time (optional)", value=None, step=60, key="task_time")
-        with col3:
-            frequency = st.selectbox("Frequency", ["daily", "weekly", "once"], key="task_frequency")
-        add_task = st.form_submit_button("Add task", key="add_task")
+def render_care() -> None:
+    st.subheader("Pet profiles")
+    with st.expander("Add a pet", expanded=not owner.pets, icon=":material/pets:"):
+        with st.form("add_pet_form"):
+            columns = st.columns((2, 2, 1))
+            name = columns[0].text_input("Pet name", max_chars=50, key="pet_name")
+            breed = columns[1].text_input("Breed or species", max_chars=50, key="pet_breed")
+            age = columns[2].number_input("Age (years)", min_value=0, max_value=150, step=1, key="pet_age")
+            add = st.form_submit_button("Add pet", type="primary", key="add_pet")
+        if add:
+            if name.strip() and breed.strip():
+                owner.add_pet(Pet(name.strip(), breed.strip(), age))
+                st.success(f"Added {name.strip()}.")
+            else:
+                st.error("Enter a pet name and breed or species.")
+    if not owner.pets:
+        st.info("Add a pet to start recording care tasks.")
+        return
 
-    if add_task:
-        if not task_title.strip():
-            st.error("Enter a task title.")
-        elif duration <= 0:
-            st.error("Task duration must be greater than zero minutes.")
-        elif priority not in ("high", "medium", "low"):
-            st.error("Choose a high, medium, or low priority.")
-        elif pet_index not in range(len(owner.pets)):
-            st.error("Select a pet for this task.")
-        elif frequency not in ("daily", "weekly", "once"):
-            st.error("Choose a daily, weekly, or once frequency.")
-        else:
-            selected_pet = owner.pets[pet_index]
-            task = Task(
-                name=task_title.strip(),
-                duration=duration,
-                priority=priority,
-                frequency=frequency,
-                description=description.strip(),
-                time=clock_time.strftime("%H:%M") if clock_time is not None else None,
-                due_date=due_date,
-            )
-            selected_pet.add_task(task)
-            st.success(f"Added {task.name} for {selected_pet.name}.")
+    selected = st.selectbox("Pet profile", options=range(len(owner.pets)), format_func=pet_label)
+    pet = owner.pets[selected]
+    st.caption(f"{pet.name} · {pet.breed} · {pet.age} years")
+    st.subheader("Care tasks")
+    with st.expander("Add care task", expanded=not pet.tasks, icon=":material/add_task:"):
+        render_task_form(pet)
+    open_tasks = pending_tasks()
+    for_section = [option for option in open_tasks if option[0] == selected]
+    if for_section:
+        with st.expander("Edit care task", icon=":material/edit:"):
+            edit = st.selectbox("Task to edit", options=for_section, format_func=task_label)
+            render_task_form(pet, pet.tasks[edit[1]])
+    if open_tasks:
+        with st.expander("Complete a task", icon=":material/check_circle:"):
+            with st.form("complete_task_form"):
+                option = st.selectbox("Task to complete", options=open_tasks, format_func=task_label)
+                finished_on = st.date_input("Completion date", value=date.today())
+                completed = st.form_submit_button("Mark complete", key="complete_task_submit")
+            if completed:
+                p, t = option
+                selected_pet = owner.pets[p]
+                task = selected_pet.tasks[t]
+                next_task = selected_pet.complete_task(task, finished_on)
+                st.success(f"Completed {task.name} for {selected_pet.name}.")
+                if next_task:
+                    st.caption(f"Next occurrence due {next_task.due_date.isoformat()}.")
 
-st.markdown("### Your pets")
-for pet_index, pet in enumerate(owner.pets):
-    st.write(f"**{pet_index + 1}. {pet.name} ({pet.breed})** - Age: {pet.age} years")
-    if not pet.tasks:
-        st.info(f"No tasks yet for {pet.name}.")
-
-st.markdown("### Complete a task")
-pending_options = []
-for pet_index, pet in enumerate(owner.pets):
-    for task_index, task in enumerate(pet.tasks):
-        if not task.completed:
-            pending_options.append((pet_index, task_index))
-
-if pending_options:
-    with st.form("complete_task_form"):
-        completion_option = st.selectbox(
-            "Task to complete", options=pending_options,
-            format_func=completion_label, key="completion_task",
-        )
-        completion_date = st.date_input("Completion date", key="completion_date")
-        complete_task = st.form_submit_button("Mark complete", key="complete_task_submit")
-    if complete_task:
-        if completion_date is None:
-            st.error("Choose a completion date.")
-        else:
-            pet_index, task_index = completion_option
-            selected_pet = owner.pets[pet_index]
-            completed_task = selected_pet.tasks[task_index]
-            next_task = selected_pet.complete_task(completed_task, completion_date=completion_date)
-            st.success(f"Completed {completed_task.name} for {selected_pet.name}.")
-            completion_result = [completed_task]
-            if next_task is not None:
-                st.success(f"Created the next incomplete occurrence, due {next_task.due_date.isoformat()}.")
-                completion_result.append(next_task)
-            st.table(task_rows(owner, completion_result))
-else:
-    st.info("There are no incomplete tasks to complete.")
-
-st.markdown("### Care task overview")
-pet_names = []
-for pet in owner.pets:
-    if pet.name not in pet_names:
-        pet_names.append(pet.name)
-
-col1, col2 = st.columns(2)
-with col1:
-    pet_filter = st.selectbox(
-        "Pet name filter", options=[None] + pet_names,
-        format_func=lambda name: "All pets" if name is None else name,
-        key="pet_filter",
-    )
-with col2:
-    status_values = {"All tasks": None, "Incomplete": False, "Completed": True}
-    status_filter = st.selectbox("Status filter", list(status_values), key="status_filter")
-
-st.caption("Pet filters match names exactly and include every pet with that name. Pet numbers identify individual pets.")
-st.caption("Tasks are sorted by clock time across all dates; untimed tasks appear last. This does not build a daily plan.")
-
-filtered_tasks = scheduler.filter_tasks(pet_name=pet_filter, completed=status_values[status_filter])
-ordered_tasks = [
-    task for task in scheduler.sort_by_time()
-    if any(task is filtered_task for filtered_task in filtered_tasks)
-]
-
-st.caption("Conflict warnings check all pets' scheduled incomplete tasks, regardless of the filters above. Overnight overlaps are not detected.")
-unscheduled_count = sum(
-    1 for task in scheduler.get_tasks()
-    if not task.completed and (task.due_date is None or task.time is None)
-)
-if unscheduled_count:
-    st.info(f"{unscheduled_count} incomplete task(s) are missing a date or time and cannot be checked for time conflicts.")
-warnings = scheduler.detect_conflicts()
-for warning in warnings:
-    st.warning(warning)
-if not warnings:
-    st.caption("No overlaps found among the scheduled incomplete tasks checked.")
-
-if ordered_tasks:
-    st.table(task_rows(owner, ordered_tasks))
-else:
-    if scheduler.get_tasks():
+    st.subheader("Care task overview")
+    scheduler = Scheduler(owner)
+    filters = st.columns(2)
+    names = [None, *dict.fromkeys(pet.name for pet in owner.pets)]
+    pet_filter = filters[0].selectbox("Pet name filter", names, format_func=lambda n: n or "All pets")
+    statuses = {"All tasks": None, "Incomplete": False, "Completed": True}
+    status = filters[1].selectbox("Status filter", list(statuses))
+    matches = {id(task) for task in scheduler.filter_tasks(pet_filter, statuses[status])}
+    rows = sorted([
+        {"Pet": pet_label(p), "Task": task.name, "Care type": task.rules.kind,
+         "Date": str(task.due_date) if task.due_date else "Undated",
+         "Start": task.time or "Untimed", "Minutes": task.duration, "Priority": task.priority,
+         "Frequency": task.frequency, "Status": "Complete" if task.completed else "Open",
+         "Notes": task.description}
+        for p, profile in enumerate(owner.pets) for task in profile.tasks if id(task) in matches
+    ], key=lambda row: (row["Start"] == "Untimed", row["Start"]))
+    if rows:
+        st.dataframe(rows, hide_index=True)
+    else:
         st.info("No tasks match these filters.")
+    warnings = scheduler.detect_conflicts()
+    if warnings:
+        with st.expander("Recorded time overlaps", expanded=True):
+            for warning in warnings:
+                st.warning(warning)
+
+
+def render_timeline(proposal: Proposal) -> None:
+    items = {item.key: item for item in proposal.request.items}
+    rows = []
+    for placement in proposal.placements:
+        item = items[placement.key]
+        rows.append({
+            "Start": clock(placement.start),
+            "End": clock(placement.start + item.duration),
+            "Pet": item.pet, "Care task": item.name, "Type": item.kind,
+            "Owner busy": f"{clock(placement.start - item.before)}–"
+                          f"{clock(placement.start + item.duration + item.after)}",
+        })
+    st.dataframe(rows, hide_index=True)
+
+
+def record(result: Proposal) -> None:
+    state.audit = [*state.audit[-11:], (str(result.request.day), result.status, result.trace)]
+
+
+def render_planner() -> None:
+    st.subheader("Plan a day")
+    st.caption("Review a daily proposal before you apply any task dates or times.")
+    fields = st.columns(4)
+    day = fields[0].date_input("Plan date", value=date.today(), key="plan_date")
+    start = fields[1].time_input("Available from", time(7), step=60, key="available_from")
+    end = fields[2].time_input("Available until", time(19), step=60, key="available_until")
+    budget = fields[3].number_input("Care + travel budget (min)", min_value=1, max_value=1440,
+                                    value=int(owner.available_time), key="care_budget")
+    owner.update_availability(budget)
+    labels = {"balanced": "Default", "earlier": "Earlier", "later": "Later"}
+    preference = st.selectbox("Timing for untimed tasks", list(labels), format_func=labels.get)
+    goal = ""
+    with st.expander("Describe a timing preference with local AI", icon=":material/auto_awesome:"):
+        goal = st.text_input("Soft timing preference (optional)", max_chars=180, key="goal",
+                             placeholder="Leave untimed tasks until later in the day")
+        st.caption("Use this for earlier or later timing. Enter fixed times and windows in the task fields.")
+    request = snapshot(owner, day, minute(as_text(start)), minute(as_text(end)), preference)
+
+    if st.button("Generate proposal", type="primary", key="generate_schedule"):
+        with st.spinner("Checking the plan and revising conflicts…"):
+            state.proposal = propose(request, goal, interpret_preference)
+            state.proposal_goal = goal
+            record(state.proposal)
+
+    result = state.get("proposal")
+    if result is not None:
+        if result.initial_issues:
+            with st.expander("What the first draft flagged", expanded=True):
+                for message in result.initial_issues:
+                    st.warning(message)
+        for message in result.issues:
+            st.error(message)
+        for step in result.trace:
+            if step.startswith("Local model"):
+                st.caption(step)
+        if result.ready:
+            st.subheader("Proposed schedule")
+            render_timeline(result)
+            with st.expander("Why these times?", expanded=True):
+                for explanation in result.explanations:
+                    st.text(explanation)
+            stale = request != result.request or goal != state.proposal_goal
+            if stale:
+                st.warning("Planning inputs changed. Generate a fresh proposal before approving.")
+            actions = st.columns(2)
+            approve = actions[0].button("Approve and apply", type="primary", disabled=stale, key="approve")
+            reject = actions[1].button("Reject proposal", key="reject")
+            if approve or reject:
+                result = decide(result, owner, request, approve=approve)
+                state.proposal = result
+                record(result)
+                if result.status == "approved":
+                    state.applied[day] = result
+                st.rerun()
+        if result.status == "rejected":
+            st.info("Proposal rejected. Your tasks were left as entered.")
+        stages = "\n".join(result.trace)
+        with st.expander("Validation and decision steps"):
+            st.text(stages)
+
+    applied = state.applied.get(day)
+    if applied is not None:
+        st.subheader("Applied schedule")
+        st.success(f"Approved for {day.isoformat()}.")
+        applied_starts = {row.key: row.start for row in applied.placements}
+        applied_items = tuple(replace(item, preferred=applied_starts[item.key]) for item in applied.request.items)
+        if request.items != applied_items:
+            st.caption("This is the approved snapshot. Generate a new plan to account for current task changes.")
+        render_timeline(applied)
+    with st.expander("Decision history"):
+        if not state.audit:
+            st.caption("Proposals and decisions appear here.")
+        for day_label, status, trace in reversed(state.audit):
+            st.text(f"{day_label} · {status}\n" + "\n".join(trace))
+
+
+with st.sidebar:
+    st.markdown("### Your workspace")
+    owner_name = st.text_input("Owner name", value=owner.name, max_chars=70, key="owner_name")
+    if owner_name.strip():
+        owner.name = owner_name.strip()
     else:
-        st.info("No tasks yet. Add a pet and a care task above.")
+        st.warning("Enter an owner name.")
+    st.caption("Pet profiles, plans, and activity history are stored for this session.")
+    if not owner.pets and st.button("Load a sample day", icon=":material/science:", key="load_demo"):
+        state.owner = demo("revised", date.today())
+        state.owner.name = owner.name
+        st.rerun()
 
-st.divider()
-
-st.subheader("Build Schedule")
-st.caption("Automatic plan generation is not implemented. Sorting and warnings do not move your tasks.")
-st.button("Generate schedule", disabled=True, key="generate_schedule")
+st.title("PawPal+ AI")
+st.caption("Intelligent Pet Care Planning Assistant")
+st.info("For organizing pet care. Follow your veterinarian’s instructions for medication timing and doses.",
+        icon=":material/info:")
+care_tab, plan_tab = st.tabs(("Pets and tasks", "Daily planner"))
+with care_tab:
+    render_care()
+with plan_tab:
+    render_planner()
