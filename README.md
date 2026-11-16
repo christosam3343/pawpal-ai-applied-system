@@ -1,172 +1,114 @@
-# PawPal+ (Module 2 Project)
+# PawPal+ AI — Intelligent Pet Care Planning Assistant
 
-**PawPal+** is a Python and Streamlit application for managing pets and their care tasks. Enter task times, review the task list, check for overlaps, and complete daily or weekly tasks to create their next occurrences.
+PawPal+ AI helps one owner plan a day of care across multiple pets. It finds overlaps including appointment travel, proposes feasible revisions, and asks the owner to approve the resulting schedule.
 
-## Scenario
+## Base project
 
-A busy pet owner needs a clear way to track feeding, walks, medication, grooming, and other care across multiple pets. PawPal+ records these activities and helps the owner review their timing. Task times are entered by the user; automatic schedule generation is not implemented, and **Generate schedule** remains disabled.
+[Module 2 PawPal+](https://github.com/christosam3343/ai110-module2show-pawpal-starter) recorded pets, manually timed tasks, and daily or weekly recurrence. Its Streamlit interface sorted and filtered tasks and reported recorded overlaps. The final project adds a planning loop that can generate, check, and revise proposed care times.
 
-## Features
+## What the app does
 
-- Manage multiple pets with a name, breed, and age, under one owner.
-- Add care tasks with a title, duration in minutes, high/medium/low priority, daily/weekly/once frequency, optional description, due date, and clock time.
-- View tasks ordered by their entered clock times, with untimed tasks last. This order spans all due dates; it is not a dated calendar or an automatically generated daily plan.
-- Filter by pet name and by All tasks, Incomplete, or Completed. A name filter includes every pet with that exact name; pet numbers distinguish individual pets when adding or completing tasks.
-- Mark a task complete and keep the completed original. Daily and weekly tasks create one new incomplete occurrence for the same pet, due 1 or 7 days after the selected completion date. A once task creates no successor.
-- See warnings for overlapping incomplete tasks on the same due date, including tasks belonging to different pets. Tasks are never moved or deleted to resolve a warning.
-- Track completed and incomplete tasks in the overview, including the due dates of recurring occurrences.
-- Keep the Owner, pets, and tasks in Streamlit session state across normal widget reruns. This is temporary session storage, not a file or database; it does not guarantee data survives a new session or server restart.
+- Create and select pet profiles. Add or edit feeding, walks, appointments, medication reminders, and other care. Complete recurring tasks to create their next occurrence.
+- Set a care and travel time budget, daily availability, task priorities, start windows, fixed starts, and appointment travel times.
+- Generate a proposal with explanations and a validation trace. Reject it or approve and apply its dates and start times.
+- Optionally type an earlier or later timing goal for untimed tasks. A local Qwen model interprets that goal within a closed schema.
 
-## Implementation Summary
+## Architecture
 
-The backend in `pawpal_system.py` uses four classes. `Owner` stores owner information and multiple `Pet` objects. Each `Pet` manages its own `Task` objects and handles recurring-task completion. `Task` stores the care details, optional time and due date, and completion status. `Scheduler` retrieves tasks through the Owner to sort, filter, and check overlaps. The backend also supports task updates and removal; the current UI provides task creation and completion controls.
+![Architecture of the PawPal+ proposal, validation, revision and owner review loop](assets/architecture.svg)
 
-`Owner.get_all_tasks()` combines the tasks from every pet. `Scheduler` accesses that combined list through the owner, so it includes tasks for all pets. `main.py` demonstrates this with John, Biscuit, Luna, and five initial care tasks, followed by sorting, filtering, recurring occurrences, and an overlap warning.
+[Mermaid source](diagrams/architecture.mmd) · [Design notes](DESIGN.md)
 
-`app.py` connects the same backend to Streamlit forms, a filtered task table, completion controls, and conflict warnings. It keeps the Owner in session state and reads the current pet/task objects on reruns. The pytest suite checks the backend behaviors described below.
+The Streamlit app snapshots the care records due on a selected date, including undated tasks. The planner tries the entered starts and places untimed tasks according to the selected timing preference. An independent validator checks task coverage, bounds, fixed times, travel, budget, and shared-owner overlaps. On failure, CP-SAT searches for a feasible alternative and prioritizes keeping higher-priority tasks near their preferred starts. The validator checks the alternative again. Approval compares the proposal to the live records, revalidates, and applies dates and starts. An infeasible or unverified plan cannot be approved.
 
-## Getting started
+The optional Qwen adapter receives only the soft timing phrase. A constrained JSON response selects `earlier`, `later`, `balanced`, or `clarify`. A connection or schema failure uses the selected manual preference and shows the fallback. Task fields remain the authority for dates, start windows, medication times, and travel.
 
-### Setup
+## Install and run
 
-Create the environment and install the dependencies from the project root. If the environment already exists, activate it and reuse it.
-
-```bash
-python -m venv .venv
-```
-
-Activate it in Windows PowerShell:
+Python **3.14** on Windows PowerShell was used for verification.
 
 ```powershell
-.\.venv\Scripts\Activate.ps1
+git clone https://github.com/christosam3343/pawpal-ai-applied-system.git
+cd pawpal-ai-applied-system
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m streamlit run app.py --server.address=127.0.0.1
 ```
 
-Or activate it on macOS/Linux:
+Open the local URL printed by Streamlit. Select **Load a sample day**, open **Daily planner**, and choose **Generate proposal**. Review the overlap and the explanation, then choose **Reject proposal** or **Approve and apply**. The CLI entry point from Module 2 is still available as `python main.py`.
 
-```bash
-source .venv/bin/activate
+For macOS or Linux, use `python3.14 -m venv .venv` and substitute `.venv/bin/python` for the Windows interpreter path above.
+
+### Optional local model
+
+Download the CPU build of [llama.cpp b12444](https://github.com/ggml-org/llama.cpp/releases/tag/b12444) and the [Qwen2.5 0.5B Instruct Q4_K_M model](https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/9217f5db79a29953eb74d5343926648285ec7e67/qwen2.5-0.5b-instruct-q4_k_m.gguf). The model is approximately 491 MB. Keep the extracted runtime and weights outside tracked files. The following command assumes they are in the ignored `local_data` paths.
+
+```powershell
+.\local_data\llama\llama-server.exe --host 127.0.0.1 --port 8089 --alias pawpal-qwen --model .\local_data\qwen2.5-0.5b-instruct-q4_k_m.gguf -c 2048 -t 4 -ngl 0
 ```
 
-Then install the dependencies and start the app:
+Leave that terminal running while using the local AI field. Enter **Save the flexible activities for the evening.** to test a later preference. Try it with an untimed flexible task. Model SHA-256 is `74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db`. The standard app and four offline cases run with no model, API key, or paid service.
 
-```bash
-python -m pip install -r requirements.txt
-python -m streamlit run app.py
+## Reproducible execution evidence
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe evaluate.py
+.\.venv\Scripts\python.exe evaluate.py --scenario revised
+.\.venv\Scripts\python.exe evaluate.py --with-model
 ```
 
-Open the local URL printed by Streamlit. Keep that terminal running while using the application. To run the CLI demonstration instead, use `python main.py`.
+The [full recorded run](evidence/scenarios.txt) contains the complete request, decision trace, validation issues, and before/after values for each scenario. These excerpts come from that run.
 
-### Suggested workflow
-
-1. Read the scenario carefully and identify requirements and edge cases.
-2. Draft a UML diagram (classes, attributes, methods, relationships).
-3. Convert UML into Python class stubs (no logic yet).
-4. Implement scheduling logic in small increments.
-5. Add tests to verify key behaviors.
-6. Connect your logic to the Streamlit UI in `app.py`.
-7. Refine UML so it matches what you actually built.
-
-## 🖥️ Sample Output
-
-Run `python main.py` in the project's virtual environment to see the current multi-pet demonstration. It uses a fixed completion date for repeatable output and manually entered task times; it does not automatically build or rearrange a plan.
+**Normal day**
 
 ```text
-Today's Schedule - PawPal+
-Owner: John
-Times are entered manually; overlap warnings do not move tasks.
-
-Biscuit (Golden Retriever)
-- 09:00 | Biscuit | Morning Walk | 30 minutes | Priority: high | Due: 2026-10-24 | Status: incomplete
-- 08:00 | Biscuit | Breakfast | 10 minutes | Priority: high | Due: 2026-10-24 | Status: incomplete
-
-Luna (Persian Cat)
-- 07:30 | Luna | Feeding | 15 minutes | Priority: high | Due: 2026-10-24 | Status: incomplete
-- 10:00 | Luna | Grooming | 20 minutes | Priority: medium | Due: 2026-10-24 | Status: incomplete
-- 09:15 | Luna | Playtime | 20 minutes | Priority: low | Due: 2026-10-24 | Status: incomplete
-
-All pets - sorted by time
-- 07:30 | Luna | Feeding | 15 minutes | Priority: high | Due: 2026-10-24 | Status: incomplete
-- 08:00 | Biscuit | Breakfast | 10 minutes | Priority: high | Due: 2026-10-24 | Status: incomplete
-- 09:00 | Biscuit | Morning Walk | 30 minutes | Priority: high | Due: 2026-10-24 | Status: incomplete
-- 09:15 | Luna | Playtime | 20 minutes | Priority: low | Due: 2026-10-24 | Status: incomplete
-- 10:00 | Luna | Grooming | 20 minutes | Priority: medium | Due: 2026-10-24 | Status: incomplete
-
-Biscuit - incomplete tasks
-- 09:00 | Biscuit | Morning Walk | 30 minutes | Priority: high | Due: 2026-10-24 | Status: incomplete
-- 08:00 | Biscuit | Breakfast | 10 minutes | Priority: high | Due: 2026-10-24 | Status: incomplete
-
-Recurring task completion demo - completed on 2026-10-24
-
-Biscuit - daily: completed original (kept in pet's task list)
-- 08:00 | Biscuit | Breakfast | 10 minutes | Priority: high | Due: 2026-10-24 | Status: completed
-New incomplete occurrence:
-- 08:00 | Biscuit | Breakfast | 10 minutes | Priority: high | Due: 2026-10-25 | Status: incomplete
-
-Luna - weekly: completed original (kept in pet's task list)
-- 10:00 | Luna | Grooming | 20 minutes | Priority: medium | Due: 2026-10-24 | Status: completed
-New incomplete occurrence:
-- 10:00 | Luna | Grooming | 20 minutes | Priority: medium | Due: 2026-10-31 | Status: incomplete
-
-Conflict check - incomplete tasks with a due date and clock time
-Tasks missing a due date or clock time are unscheduled and were not checked.
-Warning: Conflict on 2026-10-24: Biscuit - Morning Walk (09:00, 30 minutes) overlaps Luna - Playtime (09:15, 20 minutes).
+Input: Biscuit Walk (30 min; allowed starts 09:00–17:30); Luna Breakfast (15 min; preferred 07:30).
+"proposal": [["Breakfast", "07:30", "07:45"], ["Walk", "13:15", "13:45"]]
+"initial_issues": [], "final_issues": [], "decision": "approved"
 ```
 
-## Testing PawPal+
-
-Run the full test suite from the project root with the virtual environment active:
-
-```bash
-python -m pytest
-```
-
-The 49 test cases cover task completion and addition, time validation, chronological sorting, pet/status filtering, multi-pet task retrieval, daily and weekly recurrence, calendar rollover, and duplicate prevention. Conflict tests cover exact matches, partial and fully contained overlaps, back-to-back tasks, and exclusion of completed or unscheduled tasks. Regression tests also check re-sorting after a time update without changing stored order and finding a pet added after Scheduler creation.
-
-Recorded successful backend test run:
+**Conflict and revision**
 
 ```text
-============================= test session starts =============================
-platform win32 -- Python 3.14.5, pytest-9.1.1, pluggy-1.7.0
-rootdir: D:\OneDrive - University of New Haven\School Files - UNH\Sem 4\Codepath\ai110-module2show-pawpal-starter
-plugins: anyio-4.15.1
-collected 49 items
-
-tests\test_pawpal.py .................................................   [100%]
-
-============================= 49 passed in 0.21s ==============================
+Input: 08:00 walk; confirmed 07:55 medication reminder; 08:30 vet appointment with 30 min travel in each direction.
+"proposal": [["Morning walk", "07:25", "07:55"], ["Recorded medication reminder", "07:55", "08:00"], ["Vet appointment", "08:30", "09:00"]]
+"trace": ["Input validation passed for 3 tasks.", "Initial candidate validation found 1 issue(s).", "Constraint search returned OPTIMAL.", "Revised candidate passed independent validation.", "Awaiting owner review.", "Owner approved. Revalidation passed and times were applied."]
+"unchanged_before_approval": true
 ```
 
-**Confidence Level: 4/5 stars (★★★★☆).** The main backend behaviors have automated coverage. Streamlit AppTest also checked adding pets/tasks, sorting, filters, recurrence, conflict warnings, and rerun persistence. The conflict-warning and daily-recurrence flows were manually verified in the browser during Phase 6. Overnight conflicts across different due dates are not detected, and automatic plan generation remains unimplemented; **Generate schedule** is disabled.
+**Missing medication confirmation**
 
-## Smarter Scheduling
+```text
+Input: 08:15 medication reminder with timing confirmation false.
+"proposal": []
+"final_issues": ["Biscuit (pet 1) / Recorded medication reminder needs a fixed time confirmed against existing veterinary instructions."]
+"decision": "blocked"
+```
 
-The Scheduler methods below retrieve tasks across all pets through `Owner.get_all_tasks()`. Recurrence is handled by the pet that owns the task.
+**Live local model**
 
-| Feature | Method(s) | Notes |
-|---------|-----------|-------|
-| Time sorting | `Scheduler.sort_by_time()`, `Scheduler.sort_tasks()` | Return a new list ordered by validated `HH:MM` clock times. Untimed tasks go last; equal times and untimed tasks retain their original order. Sorting does not change stored lists or order tasks by due date. |
-| Pet/status filtering | `Scheduler.filter_tasks(pet_name=None, completed=None)` | Filter by exact pet name, completion status, or both. A shared name includes every matching pet. `completed=False` selects incomplete tasks; `None` leaves that filter off. |
-| Recurring tasks | `Pet.complete_task(task, completion_date=None)` | Complete a task belonging to that pet and append one incomplete successor: daily tasks are due 1 day after completion, weekly tasks 7 days after completion. Copy task details and clock time, preserve the original, and prevent duplicate successors. Omitted completion dates use today. Other frequencies create no successor. |
-| Overlap warnings | `Scheduler.detect_conflicts()` | Return warning messages for incomplete tasks with overlapping start times and durations on the same due date, including tasks for different pets. Back-to-back tasks are allowed, each pair is reported once, and no conflicts returns an empty list. |
+```text
+"timing_goal": "Save the flexible activities for the evening."
+"default_starts": ["07:30", "13:15"]
+"proposal": [["Breakfast", "07:30", "07:45"], ["Walk", "17:30", "18:00"]]
+"trace": ["Input validation passed for 2 tasks.", "Local model selected later for untimed tasks.", "Initial candidate validation found 0 issue(s).", "Awaiting owner review.", "Owner approved. Revalidation passed and times were applied."]
+Summary: 5/5 scenarios passed
+```
 
-Use `Pet.complete_task()` to trigger recurrence; `Task.mark_complete()` and `Task.mark_completed()` only change completion status. The next occurrence is already stored on the same pet.
+## Reliability and design decisions
 
-Conflict checks require a due date, clock time, and positive duration. Tasks missing a date or time are unscheduled and are not checked, so an empty warning list does not establish that those tasks are conflict-free. Overnight overlaps between different due dates are not detected. Priorities and available minutes are stored, but these methods do not automatically choose tasks to fit a time budget or move conflicting tasks.
+- **96 pytest cases passed**, including 49 from Module 2. The expanded suite exercises conflicting appointments, cross-pet overlaps, missing inputs, task priority, unsupported constraints, model failures, stale approval, recurrence, and Streamlit form interactions.
+- The harness verified five predefined cases with live Qwen. It also checks that an 08:15 fixed medication reminder during 08:00–09:30 appointment travel makes the day infeasible. The planner fixes the walk only when the entered fixed commitments can coexist.
+- The browser walkthrough covered the sample day, first-draft conflict, revised times, rejection, and the applied schedule. [Reproducible test and scenario records](evidence/scenarios.txt) support the demo.
+- One owner is a shared resource. Travel consumes time on both sides of an appointment. Priority protects preferred start times and every included task stays required. The solver has a bounded search and can return a verified feasible result without proving optimality.
 
-The Streamlit interface now exposes sorting, pet/status filtering, recurring-task completion, and overlap warnings. Warnings always consider all pets' scheduled incomplete tasks, even when the displayed table is filtered. The **Generate schedule** control remains disabled, and `Scheduler.generate_schedule()` still raises `NotImplementedError`. Owner preferences and available minutes are stored by the backend but have no editing controls in this UI and are not used for automatic task selection.
+## Guardrails and limits
 
-## UML Documentation
+Use this tool to organize care. Follow existing veterinary instructions for medication timing and doses. Medication planning requires a confirmed fixed time and medication timing edits need fresh confirmation. The app does not generate doses, clinical instructions, or notifications. It supports one caregiver, one calendar day, manually entered travel, and at most 30 included tasks. Profiles and decisions are held in the Streamlit session. The optional model can misread phrasing, so review its selected timing preference.
 
-The [final UML diagram source](diagrams/uml_final.mmd) documents the current fields, public methods, and relationships of Owner, Pet, Task, and Scheduler. It includes task time/due date, recurrence, sorting, filtering, and conflict warnings. The [draft UML](diagrams/uml_draft.mmd) is preserved to show how the design evolved.
+The main lesson was to verify a schedule at the point it can affect stored task records. A valid plan can become stale when an owner changes a task, even if it passed the first review.
 
-## Demo Walkthrough
+Future work could add persistent local storage, multi-caregiver planning, real-world usability evaluation, and a broader multilingual timing test set. See the [model card](model_card.md) for failure modes and AI collaboration notes, [presentation guide](presentation/README.md) for the demo, and [project audit](PROJECT_PROGRESS.md) for rubric evidence.
 
-1. With the virtual environment active, run `python -m streamlit run app.py` from the project root and open the displayed local URL.
-2. In **Owner and pets**, enter your name in **Owner name**. An empty name leaves the saved owner name unchanged.
-3. In **Add a pet**, enter Biscuit, Golden Retriever, and age 3, then click **Add pet**. Repeat for Luna, Persian Cat, age 2. Both appear under **Your pets**.
-4. In **Tasks**, select Biscuit in **Pet**. Enter Morning Walk as the **Task title**, 30 in **Duration (minutes)**, high **Priority**, and daily **Frequency**. Choose a **Due date (optional)** and **Start time (optional)** of 09:00, then click **Add task**. A description is optional. Leaving the date or time blank records an unscheduled task that cannot be checked for time conflicts.
-5. Review **Care task overview**. Tasks appear by clock time across all dates, with untimed tasks last. Use **Pet name filter** and **Status filter** to narrow the table. If pets share a name, the name filter includes them all; the displayed pet numbers distinguish them.
-6. Add Grooming for Luna with a duration of 20 minutes, medium priority, weekly frequency, the same due date as Morning Walk, and a start time of 09:15. The 09:00-09:30 walk overlaps the 09:15-09:35 grooming task. A warning near the overview names both pets and tasks, the date, and their times. It does not move either task, and it remains relevant even if the table is filtered.
-7. In **Complete a task**, select Biscuit's Morning Walk in **Task to complete**, choose the same date in **Completion date**, and click **Mark complete**. The result table shows the completed original and a new incomplete occurrence due the next day at the same clock time. Use **All tasks** in **Status filter** to see both in the overview after later reruns.
-8. Completing a weekly task through the same control creates its next occurrence 7 days after the selected completion date. Completing a once task does not create another occurrence. Repeating a normal rerun does not create extra successors.
-9. Change a filter or the owner name to trigger a normal rerun and confirm your pets and tasks remain available. The data belongs to the current session. **Generate schedule** stays disabled because automatic plan generation is not implemented.
+[Public GitHub repository](https://github.com/christosam3343/pawpal-ai-applied-system)

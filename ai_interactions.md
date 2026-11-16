@@ -1,40 +1,9 @@
-# AI Interactions Log
+# AI interactions
 
-> **Stretch features only.** Only fill in the sections that apply to stretch features you attempted. If you did not attempt a stretch feature, leave its section blank or delete it. This file is not required for the core project.
+The [original Module 2 AI interaction record](https://github.com/christosam3343/ai110-module2show-pawpal-starter/blob/d0f842b9139a23319e1620d5e93b14fd054bd6ef/ai_interactions.md) documents the earlier submission.
 
----
+## Final-project planning traces
 
-## Agent Workflow (SF7)
+[Recorded scenario run](evidence/scenarios.txt) includes the actual agent stages and observable decisions. The `revised` case includes input validation, the first overlap report, CP-SAT's status, the revised candidate's validation, the approval gate, and the applied result. The `timing-goal` case records a live local-model decision and compares the proposal with the baseline policy.
 
-> Document your experience using an AI agent (e.g., Cursor Agent, Claude, Copilot) to make multi-step changes autonomously.
-
-**What task did you give the agent?**
-
-<!-- Describe the goal you asked the agent to accomplish -->
-
-**What did the agent do?**
-
-<!-- List the steps the agent took (files edited, commands run, etc.) -->
-
-**What did you have to verify or fix manually?**
-
-<!-- Describe anything the agent got wrong or that required human review -->
-
----
-
-## Prompt Comparison (SF11)
-
-> Compare two different prompts (or two different models) on the same task.
-
-| | Option A | Option B |
-|-|----------|----------|
-| **Model / tool used** | | |
-| **Prompt** | | |
-| **Response summary** | | |
-| **What was useful** | | |
-| **Problems noticed** | | |
-| **Decision** | | |
-
-**Which approach did you use in your final implementation and why?**
-
-<!-- Your conclusion -->
+The trace includes the steps the application performed and their results. The [model card](model_card.md) records the development decisions and test findings.
