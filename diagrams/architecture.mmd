@@ -1,0 +1,34 @@
+flowchart TD
+    UI["Streamlit: pets, tasks, and daily goals"]
+    Data["Owner, Pet, and Task records<br/>Care windows, priorities, fixed times, travel"]
+    Intake["Planning request<br/>Snapshot and input checks"]
+    Model["Optional local Qwen<br/>Interpret a soft timing preference"]
+    Draft["Build candidate from entered times"]
+    Validator["Constraint validator<br/>Required tasks, timing, travel, budget"]
+    Solver["CP-SAT revision<br/>Search feasible starts and minimize disruption"]
+    Gate["Review proposal and explanations"]
+    Apply["Approval gate<br/>Check current inputs and revalidate"]
+    Result["Applied daily schedule"]
+    Block["Blocked or rejected<br/>Edit inputs and propose again"]
+    Trace["Planning and decision log"]
+    Eval["Pytest and scenario harness"]
+
+    UI --> Data --> Intake
+    Intake -->|"Valid"| Draft
+    Intake -->|"Invalid"| Block
+    Intake -.->|"Soft goal only"| Model
+    Model -.->|"Typed preference or fallback"| Draft
+    Draft --> Validator
+    Validator -->|"Conflict or timed preference"| Solver
+    Solver -->|"Revised candidate"| Validator
+    Solver -->|"No verified result"| Block
+    Validator -->|"Pass"| Gate
+    Gate -->|"Owner approves"| Apply
+    Gate -->|"Owner rejects"| Block
+    Apply -->|"Fresh and valid"| Result
+    Apply -->|"Stale or invalid"| Block
+    Validator --> Trace
+    Apply --> Trace
+    Block --> Trace
+    Eval -.-> Intake
+    Eval -.-> Apply
