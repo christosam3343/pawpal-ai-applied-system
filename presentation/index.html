@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PawPal+ AI · Applied AI System</title>
+  <style>
+    :root { color-scheme: light; background: #e7eee8; color: #142b22; font-family: "Instrument Sans", "Segoe UI", sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    main { display: grid; min-height: calc(100dvh - 64px); place-items: center; padding: 20px; }
+    article { padding: clamp(24px, 5vw, 78px); background: #fbfaf3; width: min(100%, 1190px); min-height: clamp(460px, 72vh, 670px); }
+    article[hidden] { display: none; }
+    .cover { background: #153c31; color: #f8f7e9; display: flex; flex-direction: column; justify-content: center; }
+    h1, h2, p { margin: 0; }
+    h1 { font-size: clamp(56px, 10vw, 131px); font-weight: 720; letter-spacing: -.075em; line-height: .96; }
+    h2 { font-size: clamp(34px, 5vw, 68px); letter-spacing: -.05em; line-height: 1.02; margin-bottom: .6em; }
+    h3 { font-size: clamp(20px, 3vw, 31px); margin: 0 0 .55em; }
+    p, li, th, td { font-size: clamp(17px, 2.3vw, 26px); line-height: 1.4; }
+    .cover p { margin-top: 24px; font-size: clamp(20px, 3.25vw, 34px); }
+    .cover .small { color: #c6d8a9; font-size: 17px; margin-top: 55px; }
+    .columns { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(22px, 5vw, 64px); }
+    section + section { border-left: 1px solid #c9d6c6; padding-left: clamp(22px, 5vw, 64px); }
+    ul { padding-left: 1.15em; margin: .2em 0 0; }
+    li + li { margin-top: .5em; }
+    table { width: 100%; border-collapse: collapse; text-align: left; }
+    th, td { border-bottom: 1px solid #c9d6c6; padding: .4em .55em .4em 0; }
+    th { font-size: 16px; color: #296252; }
+    td { font-variant-numeric: tabular-nums; }
+    .note { margin-top: 24px; color: #245847; }
+    .numbers { display: flex; flex-wrap: wrap; gap: 20px 78px; margin-bottom: 32px; }
+    .number { display: grid; gap: 4px; }
+    .number strong { font-size: clamp(56px, 9vw, 104px); font-weight: 700; letter-spacing: -.08em; line-height: 1; color: #206558; }
+    a { color: #155d48; text-underline-offset: .2em; }
+    .flow { display: grid; grid-template-columns: 1fr 1fr; gap: 25px 36px; }
+    .flow h3 { border-top: 2px solid #206558; padding-top: 12px; }
+    .flow p { font-size: clamp(17px, 2vw, 23px); }
+    nav { display: flex; justify-content: center; align-items: center; gap: 16px; padding: 12px; min-height: 64px; }
+    button { background: #153c31; color: #fff; border: 0; padding: 9px 16px; font: inherit; border-radius: 4px; }
+    button:disabled { opacity: .45; }
+    button:focus-visible, a:focus-visible { outline: 3px solid #26876e; outline-offset: 4px; }
+    @media(max-width:620px) { .columns, .flow { grid-template-columns: 1fr; } section + section { border-left: 0; border-top: 1px solid #c9d6c6; padding: 19px 0 0; } }
+    @media print { main { display: block; padding: 0; } article, article[hidden] { display: block; break-after: page; width: 100%; min-height: 90vh; } nav { display: none; } }
+  </style>
+</head>
+<body>
+  <main aria-label="PawPal+ AI slides">
+    <article class="cover">
+      <h1>PawPal+ AI</h1>
+      <p>Intelligent Pet Care Planning Assistant</p>
+      <p class="small">Christo Thomas · CodePath AI110 · Project 4</p>
+    </article>
+    <article hidden>
+      <h2>Pet care shares one calendar</h2>
+      <div class="columns">
+        <section>
+          <h3>Module 2 PawPal+</h3>
+          <ul><li>Multiple pet profiles and recurring tasks</li><li>Manually recorded times and overlap warnings</li></ul>
+        </section>
+        <section>
+          <h3>Applied AI extension</h3>
+          <ul><li>Account for travel and fixed care times</li><li>Find and verify a feasible daily plan</li><li>Apply changes after owner review</li></ul>
+        </section>
+      </div>
+    </article>
+    <article hidden>
+      <h2>Planning and approval</h2>
+      <div class="flow">
+        <div><h3>1. Collect constraints</h3><p>Streamlit snapshots a day of tasks, priorities, availability and appointment travel.</p></div>
+        <div><h3>2. Build the first draft</h3><p>Recorded times anchor the draft. Optional local Qwen interprets a soft timing preference for untimed tasks.</p></div>
+        <div><h3>3. Check and revise</h3><p>Python validates the draft. CP-SAT searches for a revision when it finds conflicts, then the validator checks again.</p></div>
+        <div><h3>4. Ask the owner</h3><p>The owner reviews the proposal and decides. Approval checks the latest task data before applying.</p></div>
+      </div>
+    </article>
+    <article hidden>
+      <h2>Live demo · The morning overlap</h2>
+      <table>
+        <thead><tr><th scope="col">Care task</th><th scope="col">Entered</th><th scope="col">Proposed</th></tr></thead>
+        <tbody>
+          <tr><td>Biscuit’s walk</td><td>08:00</td><td>07:25</td></tr>
+          <tr><td>Confirmed medication reminder</td><td>07:55</td><td>07:55</td></tr>
+          <tr><td>Luna’s vet appointment</td><td>08:30</td><td>08:30</td></tr>
+        </tbody>
+      </table>
+      <p class="note">The appointment and travel keep the owner busy from 08:00 to 09:30.</p>
+    </article>
+    <article hidden>
+      <h2>Reliability results</h2>
+      <div class="numbers">
+        <div class="number"><strong>96</strong><p>pytest cases passed</p></div>
+        <div class="number"><strong>5/5</strong><p>predefined scenarios passed</p></div>
+      </div>
+      <ul>
+        <li>Missing medication confirmation blocks a plan.</li>
+        <li>Fixed commitments that overlap travel can make the day infeasible.</li>
+        <li>Live Qwen interpreted an evening preference and moved the untimed walk from 13:15 to 17:30.</li>
+      </ul>
+    </article>
+    <article hidden>
+      <h2>Limits and lessons</h2>
+      <ul>
+        <li>One caregiver, one day, and manually entered travel estimates.</li>
+        <li>The language model can misread a goal. The owner can select a timing preference directly.</li>
+        <li>Approval rechecks constraints because a task may change after the proposal is made.</li>
+      </ul>
+      <p class="note"><a href="https://github.com/christosam3343/pawpal-ai-applied-system">Public repository and execution evidence</a></p>
+    </article>
+  </main>
+  <nav aria-label="Slide navigation">
+    <button id="previous" type="button">Previous</button>
+    <output id="count" aria-live="polite"></output>
+    <button id="next" type="button">Next</button>
+  </nav>
+  <script>
+    const slides = [...document.querySelectorAll("article")];
+    const previous = document.querySelector("#previous");
+    const next = document.querySelector("#next");
+    const count = document.querySelector("#count");
+    let current = 0;
+
+    function show(index) {
+      current = Math.max(0, Math.min(slides.length - 1, index));
+      for (const [position, slide] of slides.entries()) slide.hidden = position !== current;
+      count.value = `${current + 1} of ${slides.length}`;
+      previous.disabled = current === 0;
+      next.disabled = current === slides.length - 1;
+    }
+
+    previous.addEventListener("click", () => show(current - 1));
+    next.addEventListener("click", () => show(current + 1));
+    document.addEventListener("keydown", event => {
+      if (event.key === "ArrowLeft") show(current - 1);
+      if (event.key === "ArrowRight") show(current + 1);
+      if (event.key === "Home") show(0);
+      if (event.key === "End") show(slides.length - 1);
+    });
+    show(0);
+  </script>
+</body>
+</html>
