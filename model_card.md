@@ -34,7 +34,7 @@ The 08:30 appointment initially looks compatible with an 08:15 reminder if only 
 
 ## How Codex was used
 
-Codex inspected the inherited code and baseline tests, drafted the planning architecture, implemented and exercised the planner and UI, debugged the checks, and recorded the evidence. The course author supplied the Module 2 project, the intended workflow, and access to the grading instructions. This record describes development work observed in the session.
+Codex inspected the inherited code and baseline tests, drafted the planning architecture, implemented and exercised the planner and UI, debugged the checks, and recorded the evidence. Christo Thomas supplied his Module 2 project, the intended workflow, and access to the grading instructions. He directed the implementation, requested verification against every requirement, and asked for the checklist and documentation to reflect completed work. The accepted and revised suggestions below describe decisions implemented during that assisted development session, rather than claiming independent manual development or a user study.
 
 **Accepted suggestion.** Recheck the proposed placements and live request at approval. This preserved the rule that a proposal is only applied after review and prevented a changed task from causing a partial or stale update. The stale-input and tampered-placement tests exercise both checks.
 

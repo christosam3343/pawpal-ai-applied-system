@@ -3,7 +3,7 @@ flowchart TD
     Data["Owner, Pet, and Task records<br/>Care windows, priorities, fixed times, travel"]
     Intake["Planning request<br/>Snapshot and input checks"]
     Model["Optional local Qwen<br/>Interpret a soft timing preference"]
-    Draft["Build candidate from entered times"]
+    Draft["Build candidate from entered times<br/>and untimed-task preference"]
     Validator["Constraint validator<br/>Required tasks, timing, travel, budget"]
     Solver["CP-SAT revision<br/>Search feasible starts and minimize disruption"]
     Gate["Review proposal and explanations"]
@@ -18,14 +18,17 @@ flowchart TD
     Intake -->|"Invalid"| Block
     Intake -.->|"Soft goal only"| Model
     Model -.->|"Typed preference or fallback"| Draft
+    Model -.->|"Clarification needed"| Block
     Draft --> Validator
-    Validator -->|"Conflict or timed preference"| Solver
+    Validator -->|"First draft fails"| Solver
+    Validator -->|"Revised candidate fails"| Block
     Solver -->|"Revised candidate"| Validator
     Solver -->|"No verified result"| Block
     Validator -->|"Pass"| Gate
     Gate -->|"Owner approves"| Apply
     Gate -->|"Owner rejects"| Block
     Apply -->|"Fresh and valid"| Result
+    Result -->|"Write approved dates and starts"| Data
     Apply -->|"Stale or invalid"| Block
     Validator --> Trace
     Apply --> Trace

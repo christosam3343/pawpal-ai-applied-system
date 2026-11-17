@@ -1,5 +1,7 @@
 # PawPal+ Project Reflection
 
+> Historical Module 2 reflection, retained from the base project. Statements below describe that earlier version. The final project's current functionality is documented in [README.md](README.md), and all Project 4 reflection and ethics prompts are answered in [model_card.md](model_card.md).
+
 ## 1. System Design
 
 **a. Initial design**

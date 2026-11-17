@@ -2,7 +2,25 @@
 
 The [Week 9 assignment](https://courses.codepath.org/courses/ai110/unit/9#!projects) and the [Project 4 rubric](https://courses.codepath.org/courses/ai110/pages/grading#heading-project-4-applied-ai-system) were inspected while signed in. The rubric has 21 required points and up to eight stretch points. The statuses below describe implementation and observed verification. CodePath assigns the grade.
 
-## Milestones
+## Full re-audit · November 16, 2026
+
+Reviewed the signed-in assignment sections and all 21 required rubric items again against the implementation, tests, and deliverables. All 21 implementation/documentation items below remain PASS; this is a verification report, not an awarded grade. The posted-deadline warning and pending final submission remain as recorded below.
+
+| Check | Fresh observation |
+| --- | --- |
+| Automated suite | `python -m pytest -q`: **96 passed in 14.15s**. Updated raw output in `evidence/pytest.txt`. Includes all 49 unchanged original tests and four Streamlit AppTest checks. |
+| Integrated inference and end-to-end evaluation | `python evaluate.py --with-model`: **5/5 scenarios passed** against the real local Qwen server. Re-recorded `evidence/scenarios.txt`; results were identical to the earlier committed run. This covers normal planning, conflict repair, missing confirmation, infeasible fixed commitments, and the model changing an untimed walk from 13:15 to 17:30. |
+| Dependency and legacy checks | `python -m pip check`: **No broken requirements found.** The unchanged `main.py` still runs and prints the original two-pet schedule. The installed Windows Python 3.14 environment was checked; a separate fresh installation on another OS was not performed. |
+| Browser workflow | Started the local Streamlit app, loaded its sample day, generated the 07:25/07:55/08:30 proposal, rejected it, regenerated, and approved. Observed the applied table with appointment travel occupying 08:00–09:30. |
+| Diagram | Corrected the first-draft failure label, added clarification and revised-validation failure paths, and showed approved dates/times returning to records. Mermaid CLI rendered the updated SVG successfully; inspected the result in the browser. |
+| Documentation | Corrected attribution of the supplied Module 2 project to Christo Thomas. Labeled `reflection.md` and the old UML files as historical material so their earlier limitations cannot be mistaken for the final project's capabilities. Checked local links in all seven current README/design/model-card/interaction/presentation Markdown documents: **PASS**. |
+| Presentation | Visually inspected all six slides at 1280×720, checked navigation, and reviewed the speaking notes covering 0:00–6:00 and portfolio paragraph. Materials are prepared; this does not claim a presentation has been delivered or timed aloud by the student. |
+| Original project | Original worktree remains clean; local HEAD and read-only remote main lookup both equal `d0f842b9139a23319e1620d5e93b14fd054bd6ef`. Verified that commit is an ancestor of the final project. Original tests and `main.py` are unchanged in the final copy. |
+| GitHub and checklist | Public GitHub API returned `private: false`, default branch `main`. New origin points to `christosam3343/pawpal-ai-applied-system`. Portal has **18 checked required editable boxes**, one unchecked optional Loom box, and 20 disabled informational boxes. Final Submit was not clicked. |
+
+No application-code defect was found in this review. Corrections were to documentation and the architecture diagram. The repository still supports one caregiver/day and session-only storage; model evaluation remains one live English phrase plus injected failure tests, not a broad accuracy benchmark. Use `git log -1 --oneline -- PROJECT_PROGRESS.md` to identify the commit containing this re-audit and its corrections.
+
+## Milestone history
 
 | Milestone | Result and verification | Commit |
 | --- | --- | --- |
